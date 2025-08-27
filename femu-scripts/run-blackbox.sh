@@ -5,7 +5,7 @@
 # image directory
 IMGDIR=$HOME/images
 # Virtual machine disk image
-OSIMGF=$IMGDIR/u20s.qcow2
+OSIMGF=$IMGDIR/u20s-expFinal.qcow2
 
 if [[ ! -e "$OSIMGF" ]]; then
 	echo ""
@@ -16,7 +16,7 @@ if [[ ! -e "$OSIMGF" ]]; then
 	exit
 fi
 
-sudo x86_64-softmmu/qemu-system-x86_64 \
+sudo $(pwd)/build-femu/x86_64-softmmu/qemu-system-x86_64 \
     -name "FEMU-BBSSD-VM" \
     -enable-kvm \
     -cpu host \
@@ -30,3 +30,22 @@ sudo x86_64-softmmu/qemu-system-x86_64 \
     -net nic,model=virtio \
     -nographic \
     -qmp unix:./qmp-sock,server,nowait 2>&1 | tee log
+
+#sudo $(pwd)/build-femu/x86_64-softmmu/qemu-system-x86_64 \
+#    -name "FEMU-BBSSD-VM" \
+#    -enable-kvm \
+#    -cpu host \
+#    -smp 8 \
+#    -m 40G \
+#    -device virtio-scsi-pci,id=scsi0 \
+#    -device scsi-hd,drive=hd0 \
+#    -drive file=$OSIMGF,if=none,aio=native,cache=none,format=qcow2,id=hd0 \
+#    -device femu,devsz_mb=32768,femu_mode=1 \
+#    -net user,hostfwd=tcp::8080-:22 \
+#    -net nic,model=virtio \
+#    -nographic \
+#    -qmp unix:./qmp-sock,server,nowait \
+#    -D femu-debug.log \
+#    -d guest_errors,trace:femu_* \
+#    2>&1 | tee qemu-output.log
+#

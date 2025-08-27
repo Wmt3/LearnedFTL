@@ -22,15 +22,14 @@
 // static int hit_num = 0;
 // static int gc_num = 0;
 // static int gc_line_num = 0;
-static int gc_threshold = 5;   // ! GC 매개 변수 : GTD_WP가 몇 줄을 사용하는 경우 GC를 시작합니다.
-static int free_line_threshold = 3;    // ! GC 매개 변수 : 아직 사용하지 않는 자유_LINES가 여전히 남아있을 때 GC를 시작합니다.
+static int gc_threshold = 5;   // ! gc参数：当一个gtd_wp使用了多少个Line时开始GC
+static int free_line_threshold = 3;    // ! gc参数：当还剩多少未使用的free_line时开始GC
 // static int train_num = 0;
 
-static FILE* gc_fp;
+// static FILE* gc_fp;
 
 // static uint64_t tmp_counter = 0;
-static uint64_t counter = 0;
-int write_counter=0;
+// static uint64_t counter = 0;
 // static int line_init = 0;
 // static int batch_do_gtd_gc = 0;
 // static int actual_but_not_bitmap = 0;
@@ -38,6 +37,12 @@ int write_counter=0;
 // static int total_no_pred_num = 0;
 // static int total_pred_num = 0;
 // static int no_model_num = 0;
+static uint64_t total_gc_time_ns = 0;
+static uint64_t total_sort_time_ns = 0;
+static uint64_t total_training_time_ns = 0;
+static uint64_t total_gc_write_time_ns = 0;
+
+
 
 
 static int line_do_gc(struct ssd *ssd, bool force, struct write_pointer *wpp, struct line *victim_line);
@@ -332,9 +337,6 @@ static void init_line_write_pointer(struct ssd *ssd, struct write_pointer *wpp, 
     wpp->pg = 0;
     wpp->blk = curline->id;
     wpp->pl = 0;
-    wpp->wpl = g_malloc0(sizeof(struct wp_lines)); // 추가
-    wpp->wpl->line = NULL; // 추가 
-    wpp->wpl->next = NULL; // 추가 
     ssd->line2write_pointer[wpp->curline->id] = wpp;
     if (&ssd->trans_wp == wpp) {
         wpp->curline->type = GTD;
@@ -447,12 +449,10 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
     struct line_mgmt *lm = &ssd->lm;
     printf("GC happens?\n");
     if (ssd->lm.free_line_cnt < 4) {
-        printf("write counter:%d\n",write_counter);
         printf("what's wrong?\n");
     }
     
-    if (wpp && wpp->vic_cnt >= gc_threshold) { // victim count가 threshold보다 크면 gc
-        printf("first if\n");
+    if (wpp && wpp->vic_cnt >= gc_threshold) {
         // if (wpp->id != 256) {
         //     printf("line %d do batch gc\n", wpp->id);
         // }
@@ -473,8 +473,6 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
         return true;
         
     } else if (ssd->trans_wp.vic_cnt >= gc_threshold) {
-        printf("second if\n");
-
 
         // * 如果gtd写指针的line的数量大于=阈值，对其进行GC
 
@@ -489,7 +487,6 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
         batch_gtd_do_gc(ssd, true, &ssd->trans_wp, ssd->trans_wp.vic_cnt, NULL);
 
     } else if (lm->free_line_cnt < 10) {
-        printf("third if\n");
 
         struct line *tvl = QTAILQ_FIRST(&lm->victim_list);
         struct write_pointer *write_back_wp = NULL;
@@ -509,61 +506,10 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
 
                 tvl = tvl->entry.tqe_next;
             }
-
             if (!tvl) {
                 tvl = QTAILQ_FIRST(&lm->victim_list);
                 write_back_wp = ssd->line2write_pointer[tvl->id];
             }
-
-
-            if (write_back_wp == NULL) {
-                // 이 블록은 vic_cnt > 1인 라인을 찾는 데 실패했을 때 진입합니다.
-                // 이제부터 차선책을 가동합니다.
-
-                // 1. Plan B: victim_list(꽉 찬 라인 목록)에 대상이 있는지 먼저 확인
-                tvl = QTAILQ_FIRST(&lm->victim_list);
-
-                if (tvl != NULL) {
-                    // victim_list에 대상이 있는 경우 (주로 순차 쓰기 환경)
-                    fprintf(stderr, "--> DEBUG: No line with vic_cnt > 1. Using first line from victim_list (line %d).\n", tvl->id);
-                    vl = tvl;
-                    write_back_wp = ssd->line2write_pointer[vl->id];
-                } else {
-                    // 2. Plan C: victim_list마저 비어있는 경우 (주로 무작위 쓰기 환경)
-                    // 현재 사용중인 모든 라인을 스캔하여 가장 효율적인 대상을 직접 찾는다.
-                    fprintf(stderr, "--> DEBUG: Victim list is empty. Searching for the dirtiest in-use line...\n");
-                    
-                    int min_vpc = ssd->sp.pgs_per_line + 1;
-                    struct line *best_victim = NULL;
-
-                    for (int i = 0; i < lm->tt_lines; i++) {
-                        struct line *current_line = &lm->lines[i];
-                        if (current_line->type == DATA && current_line->vpc > 0 && (!wpp || wpp->curline != current_line)) {
-                            if (current_line->vpc < min_vpc) {
-                                min_vpc = current_line->vpc;
-                                best_victim = current_line;
-                            }
-                        }
-                    }
-
-                    // 최적의 대상을 찾았다면, GC 대상으로 최종 지정
-                    if (best_victim) {
-                        fprintf(stderr, "--> Best victim found: line %d with %d valid pages.\n", best_victim->id, best_victim->vpc);
-                        vl = best_victim;
-                        write_back_wp = ssd->line2write_pointer[vl->id];
-                        
-                        // 중요: 찾은 victim을 victim_list에 추가해야 후속 로직(mark_line_free)이 정상 동작
-                        QTAILQ_INSERT_TAIL(&lm->victim_list, vl, entry);
-                        lm->victim_line_cnt++;
-                    } else {
-                        // 최후의 수단마저 실패한 경우
-                        fprintf(stderr, "--> CRITICAL: No suitable victim line found anywhere. Cannot perform GC!\n");
-                        return false; // GC 포기
-                    }
-                }
-            }
-
-
             if (write_back_wp->vic_cnt == 1) {
                 printf("???\n");
             }
@@ -584,7 +530,7 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
                         write_back_wp->vic_cnt--;
 
                     } else if (vl->type == DATA) {
-                        fprintf(gc_fp, "%ld\n",counter);
+                        // fprintf(gc_fp, "%ld\n",counter);
                         line_do_gc(ssd, true, write_back_wp, vl);
                         write_back_wp->vic_cnt--;
                     }
@@ -1027,7 +973,7 @@ static void ssd_init_bitmap(struct ssd *ssd) {
 
 }
 
-// * 모든 모델을 y = x로 초기화합니다
+// * 将所有的模型都初始化为y=x
 static void ssd_init_all_models(struct ssd *ssd) {
     struct ssdparams* sp = &ssd->sp;
     int avg_valid_cnt = sp->ents_per_pg / MAX_INTERVALS;
@@ -1949,6 +1895,7 @@ static void gc_read_page(struct ssd *ssd, struct ppa *ppa)
 
 static uint64_t gc_write_page_through_line_wp(struct ssd *ssd, uint64_t lpn, struct ppa *new_ppa, struct write_pointer* wpp)
 {
+    uint64_t lat = 0;	
     // struct ppa new_ppa;
     struct nand_lun *new_lun;
     // uint64_t lpn = get_rmap_ent(ssd, old_ppa);
@@ -1976,7 +1923,7 @@ static uint64_t gc_write_page_through_line_wp(struct ssd *ssd, uint64_t lpn, str
         gcw.type = GC_IO;
         gcw.cmd = NAND_WRITE;
         gcw.stime = 0;
-        ssd_advance_status(ssd, new_ppa, &gcw);
+        lat = ssd_advance_status(ssd, new_ppa, &gcw);
     }
 
     /* advance per-ch gc_endtime as well */
@@ -1988,7 +1935,7 @@ static uint64_t gc_write_page_through_line_wp(struct ssd *ssd, uint64_t lpn, str
     new_lun = get_lun(ssd, new_ppa);
     new_lun->gc_endtime = new_lun->next_lun_avail_time;
 
-    return 0;
+    return lat;
 }
 
 // static struct line *select_victim_line(struct ssd *ssd, bool force)
@@ -2295,7 +2242,7 @@ static void gc_read_all_valid_data(struct ssd *ssd, struct ppa *tppa, uint64_t g
 
 
 static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t group_gtd_lpns[][512], int *group_gtd_index, int start_gtd) {
-    // struct timespec time1, time2;
+    struct timespec start_time, end_time;
     printf("Model Training...\n");
     ssd->stat.model_training_nums++;
     const int trans_ent = ssd->sp.ents_per_pg;
@@ -2311,16 +2258,17 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
         // * first sort the lpns
         
 
-        // clock_gettime(CLOCK_MONOTONIC, &time1);
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
         quick_sort(group_gtd_lpns[i], 0, group_gtd_index[i]-1);
-        // clock_gettime(CLOCK_MONOTONIC, &time2);
+        clock_gettime(CLOCK_MONOTONIC, &end_time);
+	total_sort_time_ns += (end_time.tv_sec - start_time.tv_sec) * 1000000000 + (end_time.tv_nsec - start_time.tv_nsec);
 
         // ssd->stat.sort_time += ((time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
 
         // * second write them back, collect the ppa
         for (int pgi = 0; pgi < group_gtd_index[i]; pgi++) {
             struct ppa tmp_ppa;
-            gc_write_page_through_line_wp(ssd, group_gtd_lpns[i][pgi], &tmp_ppa, wpp);
+            total_gc_write_time_ns += gc_write_page_through_line_wp(ssd, group_gtd_lpns[i][pgi], &tmp_ppa, wpp);
             train_vppns[i][pgi] = ppa2vppn(ssd, &tmp_ppa);
         }
 
@@ -2382,9 +2330,10 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
                 // * 3.2 set the brk w and b of each segment
                 float w_u = 0, b_u = 0;
 
-                // clock_gettime(CLOCK_MONOTONIC, &time1);
+                clock_gettime(CLOCK_MONOTONIC, &start_time);
                 LeastSquareNew(segment_train_lpns, segment_train_ppas, num_p-1, &w_u, &b_u);
-                // clock_gettime(CLOCK_MONOTONIC, &time2);
+                clock_gettime(CLOCK_MONOTONIC, &end_time);
+		total_training_time_ns += (end_time.tv_sec - start_time.tv_sec) * 1000000000 + (end_time.tv_nsec - start_time.tv_nsec);
                 // ssd->stat.calculate_time += ((time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
 
                 // int already_one = 0;
@@ -2432,7 +2381,8 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
 }
 
 static int batch_line_do_gc(struct ssd* ssd, bool force, struct write_pointer *wpp, struct line *delete_line) {
-
+    struct timespec start_time, end_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
     struct ppa ppa;
     const int trans_ent = ssd->sp.ents_per_pg;
     const int parallel = ssd->sp.tt_luns;
@@ -2473,7 +2423,8 @@ static int batch_line_do_gc(struct ssd* ssd, bool force, struct write_pointer *w
     model_training(ssd, wpp, group_gtd_lpns, group_gtd_index, start_gtd);
     /* update line status */
     
-
+    clock_gettime(CLOCK_MONOTONIC,&end_time);
+    total_gc_time_ns += (end_time.tv_sec - start_time.tv_sec) * 1000000000 + (end_time.tv_nsec - start_time.tv_nsec);
     return 0;
     
 }
@@ -2516,7 +2467,6 @@ static int line_do_gc(struct ssd *ssd, bool force, struct write_pointer *wpp, st
 }
 
 static bool model_predict(struct ssd *ssd, uint64_t lpn, struct ppa *ppa) {
-    printf("predict use!\n");
     struct ssdparams *spp = &ssd->sp;
     int gtd_index = lpn/spp->ents_per_pg;
 
@@ -2580,12 +2530,26 @@ static bool model_predict(struct ssd *ssd, uint64_t lpn, struct ppa *ppa) {
 
 
 void count_segments(struct ssd* ssd) {
-    printf("total cnt: %lld\n", (long long)ssd->stat.access_cnt);
-    printf("cmt cnt: %lld\n", (long long)ssd->stat.cmt_hit_cnt);
-    printf("model cnt: %lld\n", (long long)ssd->stat.model_hit_num);
+    //printf("total cnt: %lld\n", (long long)ssd->stat.access_cnt);
+    //printf("cmt cnt: %lld\n", (long long)ssd->stat.cmt_hit_cnt);
+    //printf("model cnt: %lld\n", (long long)ssd->stat.model_hit_num);
     ssd->stat.access_cnt = 0;
     ssd->stat.cmt_hit_cnt = 0;
     ssd->stat.model_hit_num = 0;
+	
+    if (total_gc_time_ns > 0) {
+        printf("--- GC Performance Breakdown ---\n");
+        printf("Total GC Time       : %.2f ms\n", total_gc_time_ns / 1000000.0);
+        printf("  - Flash Write Time: %.2f ms (%.2f%%)\n", total_gc_write_time_ns / 1000000.0, (double)total_gc_write_time_ns / total_gc_time_ns * 100.0);
+        printf("  - LPN Sort Time   : %.2f ms (%.2f%%)\n", total_sort_time_ns / 1000000.0, (double)total_sort_time_ns / total_gc_time_ns * 100.0);
+        printf("  - Model Train Time: %.2f ms (%.2f%%)\n", total_training_time_ns / 1000000.0, (double)total_training_time_ns / total_gc_time_ns * 100.0);
+        printf("--------------------------------\n");
+    }
+    
+    total_gc_time_ns = 0;
+    total_sort_time_ns = 0;
+    total_training_time_ns = 0;
+    total_gc_write_time_ns = 0;
 }
 
 static uint64_t ssd_read(struct ssd *ssd, NvmeRequest *req)
@@ -2780,7 +2744,7 @@ static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
     }
 
     // * simulate the model sequential initalization
-    // TODO: 순차적 쓰기 길이가 학습 모델에서 세그먼트 된 함수의 유효 길이보다 큰 경우 교체하십시오.
+    // TODO: 如果顺序写长度大于学习模型中该范围的分段函数的有效长度，那么就取代它
     if (ssd->model_used) {
         sequence_cnt = end_lpn - start_lpn;
         int gtd_index = lpn/spp->ents_per_pg;
@@ -2828,8 +2792,9 @@ static void *ftl_thread(void *arg)
     uint64_t lat = 0;
     int rc;
     int i;
+    static uint64_t op_counter = 0;
 
-    gc_fp = fopen("/home/hosing/LearnedFTL/gc_frequency.txt", "w");
+    // gc_fp = fopen("/home/astl/wsz/gc_frequency.txt", "w");
 
     while (!*(ssd->dataplane_started_ptr)) {
         usleep(100000);
@@ -2861,11 +2826,11 @@ static void *ftl_thread(void *arg)
             ftl_assert(req);
             switch (req->cmd.opcode) {
             case NVME_CMD_WRITE:
-                write_counter++;
-                lat = ssd_write(ssd, req);
+                fprintf(stderr, "\n\nwrite\n\n");
+		lat = ssd_write(ssd, req);
                 break;
             case NVME_CMD_READ:
-		// fprintf(stderr, "\n\nread!\n\n");
+		// fprintf(stderr,"\n\nread\n\n");
                 lat = ssd_read(ssd, req);
                 break;
             case NVME_CMD_DSM:
@@ -2882,6 +2847,13 @@ static void *ftl_thread(void *arg)
             rc = femu_ring_enqueue(ssd->to_poller[i], (void *)&req, 1);
             if (rc != 1) {
                 ftl_err("FTL to_poller enqueue failed\n");
+            }
+		
+	    op_counter++;
+            // 100만번의 요청마다 통계를 출력
+            if (op_counter % 1000000 == 0) {
+                fprintf(stderr, "--- Stats after %lu operations ---\n", op_counter);
+                count_segments(ssd);
             }
 
             /* clean one line if needed (in the background) */
