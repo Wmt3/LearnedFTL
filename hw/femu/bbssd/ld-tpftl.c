@@ -512,7 +512,9 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
 
             if (!tvl) {
                 tvl = QTAILQ_FIRST(&lm->victim_list);
-                write_back_wp = ssd->line2write_pointer[tvl->id];
+                if(tvl!=NULL){
+                    write_back_wp = ssd->line2write_pointer[tvl->id];
+                }
             }
 
 
