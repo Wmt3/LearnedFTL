@@ -456,7 +456,7 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
         // if (wpp->id != 256) {
         //     printf("line %d do batch gc\n", wpp->id);
         // }
-        // * 如果一个写指针对应的Line的数量超过4，就必须GC
+        // * 쓰기 포인터가 해당 라인의 경우 4를 초과하면 GC가 있어야합니다.        
         init_line_write_pointer(ssd, wpp, false);
         // wpp->vic_cnt++;
         if (&ssd->trans_wp == wpp) {
