@@ -540,36 +540,13 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
 
                     for (int i = 0; i < lm->tt_lines; i++) {
                         struct line *current_line = &lm->lines[i];
-
-                        bool is_active_line = false;
-                        // 현재 wpp의 curline인지 확인
-                        if (wpp && wpp->curline == current_line) {
-                            is_active_line = true;
-                        }
                         
-                        // 다른 모든 wpp의 curline인지도 확인
-                        if (!is_active_line) {
-                            for (int j = 0; j < ssd->sp.tt_line_wps; j++) {
-                                if (ssd->gtd_wps[j].curline == current_line) {
-                                    is_active_line = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (current_line->type == DATA && current_line->vpc > 0 && !is_active_line) {
+                        if (current_line->type == DATA && current_line->vpc > 0 && (!wpp || wpp->curline != current_line)) {
                             if (current_line->vpc < min_vpc) {
                                 min_vpc = current_line->vpc;
                                 best_victim = current_line;
                             }
                         }
-                        
-                        // if (current_line->type == DATA && current_line->vpc > 0 && (!wpp || wpp->curline != current_line)) {
-                        //     if (current_line->vpc < min_vpc) {
-                        //         min_vpc = current_line->vpc;
-                        //         best_victim = current_line;
-                        //     }
-                        // }
                     }
 
                     // 최적의 대상을 찾았다면, GC 대상으로 최종 지정
@@ -2043,6 +2020,24 @@ static void mark_line_free(struct ssd *ssd, struct ppa *ppa)
 {
     struct line_mgmt *lm = &ssd->lm;
     struct line *line = get_line(ssd, ppa);
+
+
+    /* --- 근본 원인 수정 로직 시작 --- */
+    // 이 line을 사용하던 write_pointer를 찾습니다.
+    struct write_pointer *wpp_using_this_line = ssd->line2write_pointer[line->id];
+
+    if (wpp_using_this_line != NULL) {
+        // 만약 이 line이 해당 wpp의 'curline'(현재 활성 line)이었다면,
+        // wpp가 해제된 line을 계속 사용하지 못하도록 연결을 끊어줍니다 (NULL로 설정).
+        if (wpp_using_this_line->curline == line) {
+            wpp_using_this_line->curline = NULL;
+        }
+    }
+    /* --- 근본 원인 수정 로직 끝 --- */
+
+
+
+
     line->ipc = 0;
     line->vpc = 0;
     line->rest = ssd->sp.pgs_per_line;
