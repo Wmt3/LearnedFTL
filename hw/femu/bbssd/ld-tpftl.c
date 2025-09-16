@@ -2022,7 +2022,6 @@ static void mark_line_free(struct ssd *ssd, struct ppa *ppa)
     struct line *line = get_line(ssd, ppa);
 
 
-    /* --- 근본 원인 수정 로직 시작 --- */
     // 이 line을 사용하던 write_pointer를 찾습니다.
     struct write_pointer *wpp_using_this_line = ssd->line2write_pointer[line->id];
 
@@ -2033,9 +2032,6 @@ static void mark_line_free(struct ssd *ssd, struct ppa *ppa)
             wpp_using_this_line->curline = NULL;
         }
     }
-    /* --- 근본 원인 수정 로직 끝 --- */
-
-
 
 
     line->ipc = 0;
