@@ -23,7 +23,7 @@
 // static int gc_num = 0;
 // static int gc_line_num = 0;
 static int gc_threshold = 5;   // ! GC 매개 변수 : GTD_WP가 몇 줄을 사용하는 경우 GC를 시작합니다.
-static int free_line_threshold = 3;    // ! GC 매개 변수 : 아직 사용하지 않는 자유_LINES가 여전히 남아있을 때 GC를 시작합니다.
+static int free_line_threshold = 20;    // ! GC 매개 변수 : 아직 사용하지 않는 자유_LINES가 여전히 남아있을 때 GC를 시작합니다.
 // static int train_num = 0;
 
 static FILE* gc_fp;
