@@ -540,12 +540,36 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
 
                     for (int i = 0; i < lm->tt_lines; i++) {
                         struct line *current_line = &lm->lines[i];
-                        if (current_line->type == DATA && current_line->vpc > 0 && (!wpp || wpp->curline != current_line)) {
+
+                        bool is_active_line = false;
+                        // 현재 wpp의 curline인지 확인
+                        if (wpp && wpp->curline == current_line) {
+                            is_active_line = true;
+                        }
+                        
+                        // 다른 모든 wpp의 curline인지도 확인
+                        if (!is_active_line) {
+                            for (int j = 0; j < ssd->sp.tt_line_wps; j++) {
+                                if (ssd->gtd_wps[j].curline == current_line) {
+                                    is_active_line = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (current_line->type == DATA && current_line->vpc > 0 && !is_active_line) {
                             if (current_line->vpc < min_vpc) {
                                 min_vpc = current_line->vpc;
                                 best_victim = current_line;
                             }
                         }
+                        
+                        // if (current_line->type == DATA && current_line->vpc > 0 && (!wpp || wpp->curline != current_line)) {
+                        //     if (current_line->vpc < min_vpc) {
+                        //         min_vpc = current_line->vpc;
+                        //         best_victim = current_line;
+                        //     }
+                        // }
                     }
 
                     // 최적의 대상을 찾았다면, GC 대상으로 최종 지정
