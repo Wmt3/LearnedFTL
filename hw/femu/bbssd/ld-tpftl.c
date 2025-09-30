@@ -2473,6 +2473,9 @@ static int batch_line_do_gc(struct ssd* ssd, bool force, struct write_pointer *w
         cnt++;
         wpp->vic_cnt--;
         ssd->stat.gc_times++;
+        if (ssd->stat.gc_times % 100 == 0) {
+            count_segments(ssd);
+        }
         ssd->stat.line_gc_times[victim_line->id]++;
         ssd->stat.wp_victims[wpp->id]++;
         ssd->stat.line_wp_gc_times++;
@@ -2562,17 +2565,17 @@ static bool model_predict(struct ssd *ssd, uint64_t lpn, struct ppa *ppa) {
         float pred_ppa_f = predict(pred_lpn, &t->brks[piece_wise_no].w, &t->brks[piece_wise_no].b);
         uint64_t pred_ppa = (uint64_t)pred_ppa_f;
 
-        // * 四舍五入
+        // * 반올림
         if (pred_ppa_f - pred_ppa >= 0.5) {
             pred_ppa++;
         }
 
-        // * pred_ppa只可能在0-512之间，大于是错的
+        // * pred_ppa는 0-512 사이 일 수 있으며, 이는 잘못된 것보다 큽니다.
         // if (pred_ppa >= 512) {
         //     return false;
         // }
 
-        // * pred_ppa在bitmap中命中
+        // * pred_ppa는 비트 맵에서 적중합니다
         
 
         // * 논리적으로 말하면, 현재는 True를 반환해야하지만 Floating Point 계산 정확도에는 몇 가지 문제가 있으며 일부는 정확하지 않을 수 있으므로 다시 확인해야합니다.

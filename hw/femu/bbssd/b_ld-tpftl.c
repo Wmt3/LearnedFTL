@@ -2405,6 +2405,9 @@ static int batch_line_do_gc(struct ssd* ssd, bool force, struct write_pointer *w
         cnt++;
         wpp->vic_cnt--;
         ssd->stat.gc_times++;
+        if (ssd->stat.gc_times % 100 == 0) {
+            count_segments(ssd);
+        }
         ssd->stat.line_gc_times[victim_line->id]++;
         ssd->stat.wp_victims[wpp->id]++;
         ssd->stat.line_wp_gc_times++;
