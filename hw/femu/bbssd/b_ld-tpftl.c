@@ -1008,6 +1008,8 @@ static void ssd_init_statistics(struct ssd *ssd)
     st->calculate_time = 0;
     st->sort_time = 0;
     st->model_training_nums = 0;
+    st->model_train_pred_right = 0;
+    st->model_train_pred_total = 0;
     // st->max_read_lpn = 0;
     // st->min_read_lpn = INVALID_LPN;
     // st->max_write_lpn = 0;
@@ -2344,6 +2346,7 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
                 float pred_loc;
                 
                 for (int ii = 0; ii < num_p; ii++) {
+                    ssd->stat.model_train_pred_total++;
                     pred_loc = predict(segment_train_lpns[ii], &ssd->lr_nodes[start_gtd+i].brks[j].w, \
                                          &ssd->lr_nodes[start_gtd+i].brks[j].b);
                     uint64_t tmp_loc = (uint64_t)pred_loc;
@@ -2354,6 +2357,7 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
                         if (tmp_loc == segment_train_ppas[ii]) {
                             su++;
                             predict_right++;
+                            ssd->stat.model_train_pred_right++;
                             // if (ssd->lr_nodes[start_gtd+i].bitmap[tmp_loc] == 1) {
                             //     already_one++;
                             // }
@@ -2377,6 +2381,24 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
             ssd->lr_nodes[start_gtd+i].less = 0;
             ln->success_ratio = lr_success*1.0/lr_total;
         }
+    }
+
+    if (ssd->stat.model_training_nums > 0 && ssd->stat.model_training_nums % 100 == 0) {
+        uint64_t total = ssd->stat.model_train_pred_total;
+        uint64_t right = ssd->stat.model_train_pred_right;
+        if (total > 0) {
+            double hit_ratio = (double)right / (double)total;
+            double miss_ratio = 1.0 - hit_ratio;
+            printf("[ModelTraining] after %lld trainings: checks=%llu, right=%llu (%.2f%%), wrong=%llu (%.2f%%)\n",
+                   ssd->stat.model_training_nums,
+                   (unsigned long long)total,
+                   (unsigned long long)right, hit_ratio * 100.0,
+                   (unsigned long long)(total - right), miss_ratio * 100.0);
+        } else {
+            printf("[ModelTraining] after %lld trainings: no prediction checks\n", ssd->stat.model_training_nums);
+        }
+        ssd->stat.model_train_pred_right = 0;
+        ssd->stat.model_train_pred_total = 0;
     }
 }
 

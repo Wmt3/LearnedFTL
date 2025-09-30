@@ -372,6 +372,8 @@ struct statistics {
     long long write_time;
     long long read_time;
     long long model_training_nums;
+    uint64_t model_train_pred_right;
+    uint64_t model_train_pred_total;
     int gc_cnt;
     // uint64_t max_read_lpn;
     // uint64_t min_read_lpn;
