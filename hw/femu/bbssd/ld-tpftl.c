@@ -1059,6 +1059,7 @@ static void ssd_init_statistics(struct ssd *ssd)
     st->cmt_hit_ratio = 0;
     st->access_cnt = 0;
     st->model_hit_num = 0;
+    st->model_miss_num = 0;
     st->model_use_num = 0;
     st->model_out_range = 0;
     st->predict_time = 0;
@@ -2557,7 +2558,7 @@ static bool model_predict(struct ssd *ssd, uint64_t lpn, struct ppa *ppa) {
     // * start predict
     if (piece_wise_no != -1) {
 
-        // * 通过函数得到预测值
+        // * 함수를 통해 예측 값을 얻습니다
         float pred_ppa_f = predict(pred_lpn, &t->brks[piece_wise_no].w, &t->brks[piece_wise_no].b);
         uint64_t pred_ppa = (uint64_t)pred_ppa_f;
 
@@ -2574,16 +2575,17 @@ static bool model_predict(struct ssd *ssd, uint64_t lpn, struct ppa *ppa) {
         // * pred_ppa在bitmap中命中
         
 
-        // * 按理说这时就应返回true，但有一些浮点数计算精度的问题，可能有的算不准，所以需要再验证一下
+        // * 논리적으로 말하면, 현재는 True를 반환해야하지만 Floating Point 계산 정확도에는 몇 가지 문제가 있으며 일부는 정확하지 않을 수 있으므로 다시 확인해야합니다.
         *ppa = get_maptbl_ent(ssd, lpn);
         uint64_t actual_ppa = ppa2vppn(ssd, ppa);
         uint64_t read_pred_ppa = pred_ppa + ssd->lr_nodes[gtd_index].start_ppa;
         if (read_pred_ppa == actual_ppa) {
+            ssd->stat.model_hit_num++;
             *ppa = get_maptbl_ent(ssd, lpn);
-                
-            return true;        
+            return true;
         } else {
-            // * 用来排查bitmap[]=1但是测的不准的情况，这里是
+            ssd->stat.model_miss_num++;
+            // * BitMap [] = 1인지 확인하는 데 사용되었지만 측정이 부정확한지 확인합니다.
             struct ppa real_ppa = vppn2ppa(ssd, read_pred_ppa);
             if (get_rmap_ent(ssd, &real_ppa) == INVALID_LPN) {
                 ssd->stat.model_out_range++;
@@ -2599,10 +2601,27 @@ static bool model_predict(struct ssd *ssd, uint64_t lpn, struct ppa *ppa) {
 void count_segments(struct ssd* ssd) {
     printf("total cnt: %lld\n", (long long)ssd->stat.access_cnt);
     printf("cmt cnt: %lld\n", (long long)ssd->stat.cmt_hit_cnt);
-    printf("model cnt: %lld\n", (long long)ssd->stat.model_hit_num);
+    printf("model hits: %lld, misses: %lld\n",
+           (long long)ssd->stat.model_hit_num,
+           (long long)ssd->stat.model_miss_num);
+
+    uint64_t total_model_checks = ssd->stat.model_hit_num + ssd->stat.model_miss_num;
+    if (total_model_checks > 0) {
+        double hit_ratio = (double)ssd->stat.model_hit_num / (double)total_model_checks;
+        double miss_ratio = (double)ssd->stat.model_miss_num / (double)total_model_checks;
+        printf("model predict checks: %llu, hit: %llu (%.2f%%), miss: %llu (%.2f%%)\n",
+               (unsigned long long)total_model_checks,
+               (unsigned long long)ssd->stat.model_hit_num, hit_ratio * 100.0,
+               (unsigned long long)ssd->stat.model_miss_num, miss_ratio * 100.0);
+    } else {
+        printf("model predict checks: 0\n");
+    }
+
+    /* reset counters */
     ssd->stat.access_cnt = 0;
     ssd->stat.cmt_hit_cnt = 0;
     ssd->stat.model_hit_num = 0;
+    ssd->stat.model_miss_num = 0;
 }
 
 static uint64_t ssd_read(struct ssd *ssd, NvmeRequest *req)

@@ -352,6 +352,7 @@ struct statistics {
     double cmt_hit_ratio;
     uint64_t access_cnt;
     uint64_t model_hit_num;
+    uint64_t model_miss_num;
     uint64_t model_use_num;
     uint64_t model_out_range;
     uint64_t max_lpn;
