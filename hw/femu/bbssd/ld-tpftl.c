@@ -2415,6 +2415,8 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
                 float pred_loc;
                 
                 for (int ii = 0; ii < num_p; ii++) {
+                    ssd->stat.model_train_pred_total++;
+
                     pred_loc = predict(segment_train_lpns[ii], &ssd->lr_nodes[start_gtd+i].brks[j].w, \
                                          &ssd->lr_nodes[start_gtd+i].brks[j].b);
                     uint64_t tmp_loc = (uint64_t)pred_loc;
@@ -2427,7 +2429,6 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
                             predict_right++;
                             /* global counters for training-prediction stats */
                             ssd->stat.model_train_pred_right++;
-                            ssd->stat.model_train_pred_total++;
                             // if (ssd->lr_nodes[start_gtd+i].bitmap[tmp_loc] == 1) {
                             //     already_one++;
                             // }
