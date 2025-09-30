@@ -297,7 +297,7 @@ struct wp_lines{
 struct write_pointer {
     struct line *curline;
     struct wp_lines *wpl;
-    int vic_cnt;
+    int vic_cnt; // write_pointer가 얼마나 많은 line 사용중인지
     int ch;
     int lun;
     int pg;

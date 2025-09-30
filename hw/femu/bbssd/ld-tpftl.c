@@ -451,7 +451,7 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
         printf("what's wrong?\n");
     }
     
-    if (wpp && wpp->vic_cnt >= gc_threshold) { // victim count가 threshold보다 크면 gc
+    if (wpp && wpp->vic_cnt >= gc_threshold) { // data 쓰기 포인터의 victim count가 threshold보다 크면 gc
         printf("first if\n");
         // if (wpp->id != 256) {
         //     printf("line %d do batch gc\n", wpp->id);
@@ -472,7 +472,7 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
 
         return true;
         
-    } else if (ssd->trans_wp.vic_cnt >= gc_threshold) {
+    } else if (ssd->trans_wp.vic_cnt >= gc_threshold) { // gtd쓰기 포인터 vic cnt 비교
         printf("second if\n");
 
 
@@ -488,7 +488,7 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
         // * put this line to the victim lines the line write pointer belongs to
         batch_gtd_do_gc(ssd, true, &ssd->trans_wp, ssd->trans_wp.vic_cnt, NULL);
 
-    } else if (lm->free_line_cnt < 10) {
+    } else if (lm->free_line_cnt < 10) { // 사용 가능한 빈 라인 10개 미만인지
         printf("third if\n");
 
         struct line *tvl = QTAILQ_FIRST(&lm->victim_list);
@@ -702,7 +702,7 @@ static void advance_line_write_pointer (struct ssd *ssd, struct write_pointer *w
             /* go to next page in the block */
             check_addr(wpp->pg, spp->pgs_per_blk);
             wpp->pg++;
-            if (wpp->pg == spp->pgs_per_blk) {
+            if (wpp->pg == spp->pgs_per_blk) { // 꽉 찼을 때
                 
                 wpp->pg = 0;
 
@@ -718,7 +718,7 @@ static void advance_line_write_pointer (struct ssd *ssd, struct write_pointer *w
                 // struct timespec time1, time2;
 
                 // clock_gettime(CLOCK_MONOTONIC, &time1);
-                bool res = should_do_gc_v3(ssd, wpp);
+                bool res = should_do_gc_v3(ssd, wpp); // gc할 필요 없는 상황이라면 false가 return됨.
                 // clock_gettime(CLOCK_MONOTONIC, &time2);
                 
                 // ssd->stat.GC_time += ((time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
@@ -727,7 +727,7 @@ static void advance_line_write_pointer (struct ssd *ssd, struct write_pointer *w
                 
                 
                 if (!res)
-                    init_line_write_pointer(ssd, wpp, false);
+                    init_line_write_pointer(ssd, wpp, false); // 새로 라인 할당받고 vic_cnt++
                 else if (wpp != &ssd->trans_wp) {
                     if (wpp->curline->rest == 0) {
                         func(&wpp->curline->rest);
@@ -2352,7 +2352,7 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
         // gc_translation_page_write(ssd, &old_gtd_ppa);
 
         printf("group_gtd_index : %d \n",group_gtd_index[i]);
-        if (group_gtd_index[i] > TRAIN_THRESHOLD) {
+        if (group_gtd_index[i] > TRAIN_THRESHOLD) { // train할 valid lpn개수가 너무 적으면 의미가 없으니까?
 
 
             // * prepare the training arrays
@@ -2506,7 +2506,7 @@ static int batch_line_do_gc(struct ssd* ssd, bool force, struct write_pointer *w
         ssd->stat.wp_victims[wpp->id]++;
         ssd->stat.line_wp_gc_times++;
         // fprintf(gc_fp, "%ld\n",counter);
-        gc_read_all_valid_data(ssd, &ppa, group_gtd_lpns, group_gtd_index, &start_gtd);
+        gc_read_all_valid_data(ssd, &ppa, group_gtd_lpns, group_gtd_index, &start_gtd); // group_gtd_index 채움, 유효 lpn개수를 그룹별로 세어서 채워놓음
 
         wpl = wpl->next;
         mark_line_free(ssd, &ppa);
@@ -2543,10 +2543,10 @@ static int line_do_gc(struct ssd *ssd, bool force, struct write_pointer *wpp, st
 
     uint64_t group_gtd_lpns[parallel][trans_ent];
     int group_gtd_index[parallel];
-    memset(group_gtd_index, 0, sizeof(group_gtd_index));
+    memset(group_gtd_index, 0, sizeof(group_gtd_index)); 
     int start_gtd = 0;
 
-    gc_read_all_valid_data(ssd, &ppa, group_gtd_lpns, group_gtd_index, &start_gtd);
+    gc_read_all_valid_data(ssd, &ppa, group_gtd_lpns, group_gtd_index, &start_gtd); // group_gtd_index 채움, 유효 lpn개수를 그룹별로 세어서 채워놓음
 
     model_training(ssd, wpp, group_gtd_lpns, group_gtd_index, start_gtd);
 
