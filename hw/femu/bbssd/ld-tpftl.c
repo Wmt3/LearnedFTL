@@ -2351,7 +2351,7 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
         // set_rmap_ent(ssd, INVALID_LPN, &old_gtd_ppa);
         // gc_translation_page_write(ssd, &old_gtd_ppa);
 
-
+        printf("group_gtd_index : %d \n",group_gtd_index[i]);
         if (group_gtd_index[i] > TRAIN_THRESHOLD) {
 
 
