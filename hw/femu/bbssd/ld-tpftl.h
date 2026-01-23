@@ -200,7 +200,7 @@ struct ssd_channel {
     uint64_t gc_endtime;
 };
 
-struct ssdparams {
+struct ssdparams { // ssd_init_params에서 초기화
     int secsz;        /* sector size in bytes */
     int secs_per_pg;  /* # of sectors per page */
     int pgs_per_blk;  /* # of NAND pages per block */
@@ -296,7 +296,7 @@ struct wp_lines{
 /* wp: record next write addr */
 struct write_pointer {
     struct line *curline;
-    struct wp_lines *wpl;
+    struct wp_lines *wpl; // 라인 리스트 헤드 노드
     int vic_cnt; // write_pointer가 얼마나 많은 line 사용중인지
     int ch;
     int lun;

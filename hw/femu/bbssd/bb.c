@@ -1,5 +1,5 @@
 #include "../nvme.h"
-#include "./ld-tpftl.h"
+#include "./dftl.h"
 
 
 static void bb_init_ctrl_str(FemuCtrl *n)

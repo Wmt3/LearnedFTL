@@ -577,10 +577,11 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
             
             if (vl) { 
                 
-                if (write_back_wp->curline && write_back_wp->curline->rest == vl->vpc) {
+                if ((write_back_wp->curline) && (write_back_wp->curline->rest == vl->vpc)) {
                     printf("some pages are not successfully invalidated! \n");
                 }
-                if (write_back_wp->curline && write_back_wp->curline->rest >= vl->vpc) {
+                // 새로 데이터 쓸 write pointer 할당 되어 있는지 여부와 write pointer 라인에 남은 페이지 수가 기존 valid page수 이상인지 검사
+                if ((write_back_wp->curline) && (write_back_wp->curline->rest >= vl->vpc)) {
                     if (vl->type == GTD) {
                         
                         gtd_do_gc(ssd, true, write_back_wp, vl, true);
@@ -844,8 +845,8 @@ static void ssd_init_params(struct ssdparams *spp)
     spp->tt_luns = spp->luns_per_ch * spp->nchs;
 
     /* line is special, put it at the end */
-    spp->blks_per_line = spp->tt_luns; /* TODO: to fix under multiplanes */
-    spp->pgs_per_line = spp->blks_per_line * spp->pgs_per_blk;
+    spp->blks_per_line = spp->tt_luns; /* TODO: to fix under multiplanes */ // 지금 코드가 plane 1개로 가정되어있음
+    spp->pgs_per_line = spp->blks_per_line * spp->pgs_per_blk; // 32,768
     spp->secs_per_line = spp->pgs_per_line * spp->secs_per_pg;
     spp->tt_lines = spp->blks_per_lun; /* TODO: to fix under multiplanes */
 
@@ -2351,7 +2352,7 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp, uint64_t 
         // set_rmap_ent(ssd, INVALID_LPN, &old_gtd_ppa);
         // gc_translation_page_write(ssd, &old_gtd_ppa);
 
-        printf("group_gtd_index : %d \n",group_gtd_index[i]);
+        // printf("group_gtd_index : %d \n",group_gtd_index[i]);
         if (group_gtd_index[i] > TRAIN_THRESHOLD) { // train할 valid lpn개수가 너무 적으면 의미가 없으니까?
 
 
