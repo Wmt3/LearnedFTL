@@ -655,6 +655,13 @@ static uint64_t gc_write_page(struct ssd *ssd, struct ppa *old_ppa)
     /* update rmap */
     set_rmap_ent(ssd, lpn, &new_ppa);
 
+    /* ================= [로그 추가 시작] ================= */
+    uint64_t physical_idx = ppa2pgidx(ssd, &new_ppa);
+    
+    printf("[TRACE] GC_WRITE, %lu, %lu, %d, %d, %d, %d\n", 
+           lpn, physical_idx, new_ppa.g.ch, new_ppa.g.lun, new_ppa.g.blk, new_ppa.g.pg);
+    /* ================= [로그 추가 끝] ================= */
+
     mark_page_valid(ssd, &new_ppa);
 
     /* need to advance the write pointer here */
@@ -807,6 +814,14 @@ static uint64_t ssd_read(struct ssd *ssd, NvmeRequest *req)
             continue;
         }
 
+        /* ================= [READ 로그 추가 시작] ================= */
+        uint64_t physical_idx = ppa2pgidx(ssd, &ppa);
+        
+        // 포맷: [TRACE] READ, LPN, PPN, Ch, Lun, Blk, Pg
+        printf("[TRACE] READ, %lu, %lu, %d, %d, %d, %d\n", 
+               lpn, physical_idx, ppa.g.ch, ppa.g.lun, ppa.g.blk, ppa.g.pg);
+        /* ================= [READ 로그 추가 끝] ================= */
+
         struct nand_cmd srd;
         srd.type = USER_IO;
         srd.cmd = NAND_READ;
@@ -855,6 +870,14 @@ static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
         set_maptbl_ent(ssd, lpn, &ppa);
         /* update rmap */
         set_rmap_ent(ssd, lpn, &ppa);
+
+        /* ================= [로그 추가 시작] ================= */
+        uint64_t physical_idx = ppa2pgidx(ssd, &ppa);
+        
+        // 포맷: [TRACE] Operation, LPN, PPN, Ch, Lun, Blk, Pg
+        printf("[TRACE] WRITE, %lu, %lu, %d, %d, %d, %d\n", 
+               lpn, physical_idx, ppa.g.ch, ppa.g.lun, ppa.g.blk, ppa.g.pg);
+        /* ================= [로그 추가 끝] ================= */
 
         mark_page_valid(ssd, &ppa);
 
