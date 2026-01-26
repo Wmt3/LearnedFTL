@@ -3,7 +3,7 @@
 # Run FEMU as a black-box SSD (FTL managed by the device)
 
 # image directory
-IMGDIR=$HOME/images
+IMGDIR=/home/hosing/images
 # Virtual machine disk image
 OSIMGF=$IMGDIR/u20s-expFinal.qcow2
 
@@ -49,3 +49,4 @@ sudo $(pwd)/build-femu/x86_64-softmmu/qemu-system-x86_64 \
 #    -d guest_errors,trace:femu_* \
 #    2>&1 | tee qemu-output.log
 #
+
